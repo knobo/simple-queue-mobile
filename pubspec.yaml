@@ -1,0 +1,54 @@
+name: simple_queue_mobile
+description: Simple Queue Mobile App - for kunder og selgere
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # QR-scanning
+  mobile_scanner: ^3.5.5
+  
+  # State management
+  flutter_riverpod: ^2.4.9
+  
+  # HTTP client
+  dio: ^5.4.0
+  
+  # Push notifications
+  firebase_messaging: ^14.7.10
+  firebase_core: ^2.24.2
+  
+  # Lokal lagring
+  shared_preferences: ^2.2.2
+  
+  # Datoformatering
+  intl: ^0.18.1
+  
+  # UI utilities
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  
+  # Assets (legg til bilder/ikoner her)
+  # assets:
+  #   - assets/images/
+  #   - assets/icons/
+
+  # Fonts (valgfritt)
+  # fonts:
+  #   - family: CustomFont
+  #     fonts:
+  #       - asset: assets/fonts/CustomFont-Regular.ttf
