@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../providers/providers.dart';
 import 'ticket_screen.dart';
+import '../platform/platform_utils.dart';
 
 class ScanScreen extends ConsumerStatefulWidget {
   const ScanScreen({super.key});
@@ -14,7 +15,15 @@ class ScanScreen extends ConsumerStatefulWidget {
 class _ScanScreenState extends ConsumerState<ScanScreen> {
   bool _isScanning = true;
   String? _lastScan;
-  MobileScannerController controller = MobileScannerController();
+  MobileScannerController? controller;
+
+  @override
+  void initState() {
+    super.initState();
+    if (isMobile) {
+      controller = MobileScannerController();
+    }
+  }
 
   void _onDetect(BarcodeCapture capture) {
     final List<Barcode> barcodes = capture.barcodes;
@@ -113,17 +122,74 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 
     final isLoading = ref.watch(ticketNotifierProvider).isLoading;
 
+    if (isDesktop) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Bli med i kø')),
+        body: Stack(
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: Card(
+                  margin: const EdgeInsets.all(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.qr_code, size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Kamerascanning støttes ikke på desktop',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 24),
+                        const Text('Skriv inn kø-kode manuelt:'),
+                        const SizedBox(height: 16),
+                        TextField(
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            labelText: 'Kø-kode',
+                            hintText: 'f.eks. ABC123',
+                          ),
+                          textCapitalization: TextCapitalization.characters,
+                          onSubmitted: (value) {
+                            if (value.trim().isNotEmpty) {
+                              _handleQRCode(value.trim());
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (isLoading)
+              Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Scan QR-kode'),
       ),
       body: Stack(
         children: [
-          MobileScanner(
-            controller: controller,
-            onDetect: _onDetect,
-            fit: BoxFit.cover,
-          ),
+          if (controller != null)
+            MobileScanner(
+              controller: controller!,
+              onDetect: _onDetect,
+              fit: BoxFit.cover,
+            ),
           
           // Overlay med scan-ramme
           Center(
@@ -284,7 +350,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 
   @override
   void dispose() {
-    controller.dispose();
+    controller?.dispose();
     super.dispose();
   }
 }

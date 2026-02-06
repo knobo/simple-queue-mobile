@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,7 +15,7 @@ class FirebaseService {
   factory FirebaseService() => _instance;
   FirebaseService._internal();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  FirebaseMessaging? _messaging;
   String? _fcmToken;
   
   String? get fcmToken => _fcmToken;
@@ -22,10 +23,17 @@ class FirebaseService {
   /// Initialiser Firebase og FCM
   Future<void> initialize() async {
     try {
+      if (!_isSupportedPlatform()) {
+        debugPrint('FirebaseService: Not supported on this platform');
+        return;
+      }
+
       // Initialiser Firebase (krever firebase_options.dart fra flutterfire configure)
       // await Firebase.initializeApp(
       //   options: DefaultFirebaseOptions.currentPlatform,
       // );
+      await Firebase.initializeApp();
+      _messaging = FirebaseMessaging.instance;
       
       // Be om tillatelse for push-varsler
       await _requestPermission();
@@ -42,9 +50,18 @@ class FirebaseService {
     }
   }
 
+  bool _isSupportedPlatform() {
+    try {
+      return Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /// Be om tillatelse for push-notifikasjoner
   Future<void> _requestPermission() async {
-    NotificationSettings settings = await _messaging.requestPermission(
+    if (_messaging == null) return;
+    NotificationSettings settings = await _messaging!.requestPermission(
       alert: true,
       badge: true,
       sound: true,
@@ -56,8 +73,9 @@ class FirebaseService {
 
   /// Hent FCM-token for denne enheten
   Future<void> _getToken() async {
+    if (_messaging == null) return;
     try {
-      _fcmToken = await _messaging.getToken();
+      _fcmToken = await _messaging!.getToken();
       debugPrint('FCM Token: $_fcmToken');
       
       // Lagre token lokalt
@@ -67,7 +85,7 @@ class FirebaseService {
       }
       
       // Lytt til token-oppdateringer
-      _messaging.onTokenRefresh.listen((newToken) {
+      _messaging!.onTokenRefresh.listen((newToken) {
         _fcmToken = newToken;
         debugPrint('FCM Token oppdatert: $newToken');
         // TODO: Send nytt token til backend
@@ -79,6 +97,8 @@ class FirebaseService {
 
   /// Sett opp handlers for innkommende meldinger
   void _setupMessageHandlers() {
+    if (!_isSupportedPlatform()) return;
+    
     // Foreground meldinger (app åpen)
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('FCM melding mottatt (foreground): ${message.notification?.title}');
@@ -137,25 +157,29 @@ class FirebaseService {
 
   /// Abonner på en kø for push-varsler
   Future<void> subscribeToQueue(String queueId) async {
-    await _messaging.subscribeToTopic('queue_$queueId');
+    if (_messaging == null) return;
+    await _messaging!.subscribeToTopic('queue_$queueId');
     debugPrint('Abonnert på kø: $queueId');
   }
 
   /// Avslutt abonnement på kø
   Future<void> unsubscribeFromQueue(String queueId) async {
-    await _messaging.unsubscribeFromTopic('queue_$queueId');
+    if (_messaging == null) return;
+    await _messaging!.unsubscribeFromTopic('queue_$queueId');
     debugPrint('Avsluttet abonnement på kø: $queueId');
   }
 
   /// Abonner på bruker-spesifikke varsler
   Future<void> subscribeToUser(String userId) async {
-    await _messaging.subscribeToTopic('user_$userId');
+    if (_messaging == null) return;
+    await _messaging!.subscribeToTopic('user_$userId');
     debugPrint('Abonnert på bruker: $userId');
   }
 
   /// Slett FCM-token (f.eks. ved utlogging)
   Future<void> deleteToken() async {
-    await _messaging.deleteToken();
+    if (_messaging == null) return;
+    await _messaging!.deleteToken();
     _fcmToken = null;
     
     final prefs = await SharedPreferences.getInstance();
