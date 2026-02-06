@@ -1,47 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../providers/providers.dart';
+import '../models/queue_models.dart';
 
-class HistoryScreen extends StatelessWidget {
+class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
 
-  // Demo-data - erstattes med faktiske data fra API/database
-  final List<Map<String, dynamic>> _historyItems = const [
-    {
-      'queueName': 'Demo Kø 1',
-      'ticketNumber': 'A42',
-      'status': 'completed',
-      'joinedAt': '2024-01-15T10:30:00',
-      'completedAt': '2024-01-15T10:45:00',
-      'waitTime': '15 min',
-    },
-    {
-      'queueName': 'Apoteket',
-      'ticketNumber': 'B12',
-      'status': 'completed',
-      'joinedAt': '2024-01-14T14:20:00',
-      'completedAt': '2024-01-14T14:35:00',
-      'waitTime': '15 min',
-    },
-    {
-      'queueName': 'Legesenteret',
-      'ticketNumber': 'C05',
-      'status': 'cancelled',
-      'joinedAt': '2024-01-10T09:00:00',
-      'completedAt': null,
-      'waitTime': null,
-    },
-    {
-      'queueName': 'Kundeservice',
-      'ticketNumber': 'D88',
-      'status': 'completed',
-      'joinedAt': '2024-01-08T16:45:00',
-      'completedAt': '2024-01-08T17:30:00',
-      'waitTime': '45 min',
-    },
-  ];
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final historyAsync = ref.watch(ticketHistoryProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Historikk'),
@@ -50,29 +19,55 @@ class HistoryScreen extends StatelessWidget {
             icon: const Icon(Icons.filter_list),
             onPressed: () {
               // TODO: Implementer filtrering
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Filtrering kommer snart')),
+              );
             },
           ),
         ],
       ),
-      body: _historyItems.isEmpty
-          ? _buildEmptyState()
-          : ListView.builder(
+      body: historyAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text('Kunne ikke laste historikk: $err'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ref.refresh(ticketHistoryProvider),
+                child: const Text('Prøv igjen'),
+              ),
+            ],
+          ),
+        ),
+        data: (tickets) {
+          if (tickets.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: () => ref.refresh(ticketHistoryProvider.future),
+              child: Stack(
+                children: [
+                  ListView(), // For pull-to-refresh to work
+                  _buildEmptyState(),
+                ],
+              ),
+            );
+          }
+          return RefreshIndicator(
+            onRefresh: () => ref.refresh(ticketHistoryProvider.future),
+            child: ListView.builder(
               padding: const EdgeInsets.all(16.0),
-              itemCount: _historyItems.length,
+              itemCount: tickets.length,
               itemBuilder: (context, index) {
-                final item = _historyItems[index];
-                return _HistoryCard(
-                  queueName: item['queueName'],
-                  ticketNumber: item['ticketNumber'],
-                  status: item['status'],
-                  joinedAt: DateTime.parse(item['joinedAt']),
-                  completedAt: item['completedAt'] != null
-                      ? DateTime.parse(item['completedAt'])
-                      : null,
-                  waitTime: item['waitTime'],
-                );
+                final ticket = tickets[index];
+                return _HistoryCard(ticket: ticket);
               },
             ),
+          );
+        },
+      ),
     );
   }
 
@@ -108,21 +103,9 @@ class HistoryScreen extends StatelessWidget {
 }
 
 class _HistoryCard extends StatelessWidget {
-  final String queueName;
-  final String ticketNumber;
-  final String status;
-  final DateTime joinedAt;
-  final DateTime? completedAt;
-  final String? waitTime;
+  final Ticket ticket;
 
-  const _HistoryCard({
-    required this.queueName,
-    required this.ticketNumber,
-    required this.status,
-    required this.joinedAt,
-    this.completedAt,
-    this.waitTime,
-  });
+  const _HistoryCard({required this.ticket});
 
   @override
   Widget build(BuildContext context) {
@@ -130,37 +113,44 @@ class _HistoryCard extends StatelessWidget {
     final timeFormat = DateFormat('HH:mm');
     final theme = Theme.of(context);
 
-    Color statusColor;
+    // Bruk ticket.status direkte
+    final statusColor = ticket.status.color;
+    final statusText = ticket.status.displayName;
+    
     IconData statusIcon;
-    String statusText;
-
-    switch (status) {
-      case 'completed':
-        statusColor = Colors.green;
+    switch (ticket.status) {
+      case TicketStatus.completed:
         statusIcon = Icons.check_circle;
-        statusText = 'Fullført';
         break;
-      case 'cancelled':
-        statusColor = Colors.red;
+      case TicketStatus.cancelled:
         statusIcon = Icons.cancel;
-        statusText = 'Avbrutt';
         break;
-      case 'no_show':
-        statusColor = Colors.orange;
+      case TicketStatus.noShow:
         statusIcon = Icons.person_off;
-        statusText = 'Møtte ikke opp';
         break;
-      default:
-        statusColor = Colors.grey;
-        statusIcon = Icons.help;
-        statusText = 'Ukjent';
+      case TicketStatus.waiting:
+        statusIcon = Icons.hourglass_empty;
+        break;
+      case TicketStatus.called:
+        statusIcon = Icons.notifications_active;
+        break;
+    }
+
+    String? waitTimeStr;
+    if (ticket.actualWaitTime != null) {
+      final wait = ticket.actualWaitTime!;
+      if (wait.inMinutes < 60) {
+        waitTimeStr = '${wait.inMinutes} min';
+      } else {
+        waitTimeStr = '${wait.inHours} t ${wait.inMinutes % 60} min';
+      }
     }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: () {
-          // TODO: Vis detaljer
+          // TODO: Vis detaljer om gammel billett?
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -179,7 +169,7 @@ class _HistoryCard extends StatelessWidget {
                     ),
                     child: Center(
                       child: Text(
-                        ticketNumber,
+                        ticket.number,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -194,7 +184,7 @@ class _HistoryCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          queueName,
+                          ticket.queueName,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -202,7 +192,7 @@ class _HistoryCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          dateFormat.format(joinedAt),
+                          dateFormat.format(ticket.createdAt),
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 14,
@@ -238,7 +228,7 @@ class _HistoryCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (waitTime != null && status == 'completed') ...[
+              if (waitTimeStr != null && ticket.status == TicketStatus.completed) ...[
                 const SizedBox(height: 12),
                 const Divider(),
                 const SizedBox(height: 8),
@@ -247,12 +237,12 @@ class _HistoryCard extends StatelessWidget {
                     Icon(Icons.timer, size: 16, color: Colors.grey[600]),
                     const SizedBox(width: 8),
                     Text(
-                      'Venteid: $waitTime',
+                      'Ventetid: $waitTimeStr',
                       style: TextStyle(color: Colors.grey[600]),
                     ),
                     const Spacer(),
                     Text(
-                      '${timeFormat.format(joinedAt)} - ${timeFormat.format(completedAt!)}',
+                      '${timeFormat.format(ticket.createdAt)} - ${ticket.completedAt != null ? timeFormat.format(ticket.completedAt!) : "?"}',
                       style: TextStyle(
                         color: Colors.grey[500],
                         fontSize: 12,
