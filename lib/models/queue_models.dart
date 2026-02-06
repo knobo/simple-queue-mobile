@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 /// Data models for Simple Queue API
 
 class Queue {

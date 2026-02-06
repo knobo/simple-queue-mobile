@@ -10,8 +10,8 @@ class ApiService {
   // TODO: Flytt til miljøvariabel eller konfigurasjon
   static const String _baseUrl = 'https://api.simplequeue.knobo.no';
   
-  ApiService() {
-    _dio = Dio(BaseOptions(
+  ApiService({Dio? dio}) {
+    _dio = dio ?? Dio(BaseOptions(
       baseUrl: _baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
@@ -22,10 +22,12 @@ class ApiService {
     ));
     
     // Legg til interceptors for logging og auth
-    _dio.interceptors.add(LogInterceptor(
-      requestBody: true,
-      responseBody: true,
-    ));
+    if (dio == null) {
+      _dio.interceptors.add(LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+      ));
+    }
     
     // TODO: Legg til auth interceptor for JWT-token
   }
